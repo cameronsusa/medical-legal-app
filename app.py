@@ -1,116 +1,79 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 from datetime import datetime
-import hashlib
 
-st.set_page_config(page_title="Medical-Legal Record Review System", layout="wide")
+st.set_page_config(page_title="Medical Records Organizer", layout="wide")
 
-st.title("Medical-Legal Record Review System")
-st.caption("Medical-legal document organization, deduplication, chronology, and trend analysis")
+# Authentication
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
 
-st.sidebar.header("Customization Rules")
+if not st.session_state.authenticated:
+    st.title("Secure Login")
+    password = st.text_input("Enter password", type="password")
+    if password == "demo123":
+        st.session_state.authenticated = True
+        st.rerun()
+    else:
+        st.warning("Enter password to continue")
+    st.stop()
 
-duplicate_handling = st.sidebar.selectbox(
-    "Duplicate Page Handling",
-    [
-        "Move to end of chronology",
-        "Separate duplicates tab",
-        "Flag but keep in place",
-        "Delete duplicates (not recommended)"
-    ]
-)
+# Main App
+st.title("Medical Records Organizer")
+st.caption("Attorney-Client Privileged Workspace")
 
-preserve_bates = st.sidebar.checkbox("Preserve Bates Numbers", value=True)
-firm_rules = st.sidebar.text_area("Firm-Specific Rules (Optional)", placeholder="Example: Always flag missing consent forms\nExample: Separate psych records into own tab")
+tabs = st.tabs(["Upload", "Chronology", "Duplicates", "Trends", "Summary", "Preferences", "Audit Log", "Export"])
 
-st.header("Upload Records")
-uploaded_files = st.file_uploader("Upload medical or legal PDFs", type=["pdf"], accept_multiple_files=True)
+if "records" not in st.session_state:
+    st.session_state.records = []
 
-def hash_file(file_bytes):
-    return hashlib.md5(file_bytes).hexdigest()
+if "audit_log" not in st.session_state:
+    st.session_state.audit_log = []
 
-def simulate_page_quality():
-    import random
-    return random.choice(["High Quality Scan", "Moderate Scan", "Poor Scan (OCR Errors Likely)"])
+def log_action(action):
+    st.session_state.audit_log.append(f"{datetime.now()} — {action}")
 
-if uploaded_files:
-    st.success(f"{len(uploaded_files)} files uploaded successfully.")
+with tabs[0]:
+    st.header("Upload Medical Records")
+    uploaded_files = st.file_uploader("Upload PDFs or images", accept_multiple_files=True)
+    if uploaded_files:
+        for file in uploaded_files:
+            st.session_state.records.append(file)
+            log_action(f"Uploaded file: {file.name}")
+        st.success("Files uploaded successfully.")
 
-    file_data = []
-    hashes = set()
-    duplicates = []
+with tabs[1]:
+    st.header("Chronology")
+    if st.session_state.records:
+        for file in st.session_state.records:
+            st.write(file.name)
+    else:
+        st.info("No files uploaded yet.")
 
-    for file in uploaded_files:
-        bytes_data = file.read()
-        file_hash = hash_file(bytes_data)
-        page_quality = simulate_page_quality()
-        upload_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+with tabs[2]:
+    st.header("Duplicate Detection")
+    st.write("Duplicate detection placeholder — will flag similar filenames or content.")
 
-        record = {
-            "Filename": file.name,
-            "Hash": file_hash,
-            "Upload Time": upload_time,
-            "Scan Quality": page_quality,
-            "Bates Preserved": preserve_bates
-        }
+with tabs[3]:
+    st.header("Trends & Graphs")
+    st.write("Graphs will appear here once lab/vital data is added.")
 
-        if file_hash in hashes:
-            duplicates.append(record)
-        else:
-            hashes.add(file_hash)
-            file_data.append(record)
+with tabs[4]:
+    st.header("AI Summary")
+    st.text_area("Editable Case Summary", height=300)
 
-    df = pd.DataFrame(file_data)
-    dup_df = pd.DataFrame(duplicates)
+with tabs[5]:
+    st.header("Customization Preferences")
+    st.checkbox("Automatically group records by discipline")
+    st.checkbox("Move duplicates to separate section instead of deleting")
+    st.checkbox("Normalize date formats")
+    st.checkbox("Flag low-confidence OCR sections")
 
-    st.subheader("Processed Records")
-    st.dataframe(df, use_container_width=True)
+with tabs[6]:
+    st.header("Audit Log")
+    for entry in st.session_state.audit_log:
+        st.write(entry)
 
-    st.subheader("Duplicate Records")
-
-    if duplicate_handling == "Separate duplicates tab":
-        st.info("Duplicates have been placed in a separate section below.")
-        st.dataframe(dup_df, use_container_width=True)
-
-    elif duplicate_handling == "Move to end of chronology":
-        st.info("Duplicates will appear at the end of the chronology but will not be deleted.")
-        combined = pd.concat([df, dup_df])
-        st.dataframe(combined, use_container_width=True)
-
-    elif duplicate_handling == "Flag but keep in place":
-        st.info("Duplicates will be flagged but kept in their original positions.")
-        df["Duplicate"] = df["Hash"].isin(dup_df["Hash"])
-        st.dataframe(df, use_container_width=True)
-
-    elif duplicate_handling == "Delete duplicates (not recommended)":
-        st.warning("Duplicates will be deleted (demo only).")
-        st.dataframe(df, use_container_width=True)
-
-    st.subheader("Generated Chronology (Demo View)")
-    df["Date"] = pd.to_datetime(df["Upload Time"])
-    chronology = df.sort_values(by="Date")
-    st.dataframe(chronology[["Filename", "Date", "Scan Quality"]], use_container_width=True)
-
-    st.subheader("Trend Analysis (Demo)")
-    chart_type = st.selectbox("Select Trend Type", ["Labs", "Vitals", "Hospitalizations"])
-
-    demo_chart_data = pd.DataFrame({
-        "Date": pd.date_range(start="2024-01-01", periods=10),
-        "Value": [98, 101, 99, 102, 104, 100, 103, 105, 107, 106]
-    })
-
-    fig, ax = plt.subplots()
-    ax.plot(demo_chart_data["Date"], demo_chart_data["Value"])
-    ax.set_title(f"{chart_type} Trend Over Time")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Value")
-    st.pyplot(fig)
-
-    st.subheader("Project Metadata")
-    st.write("Creation Timestamp:", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    st.write("Owner:", "You")
-    st.write("Firm Rules Applied:", firm_rules or "None specified")
-
-else:
-    st.info("Upload files to begin processing.")
+with tabs[7]:
+    st.header("Export")
+    st.button("Export Chronology as PDF")
